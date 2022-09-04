@@ -49,6 +49,8 @@ public class AgentClassLoader extends ClassLoader {
     static {
         /*
          * Try to solve the classloader dead lock. See https://github.com/apache/skywalking/pull/2016
+         * 开启类加载器的并行加载模式
+         * 所谓并行加载模式，就是把锁的粒度降低了，原理就是讲类加载时的锁从类加载器级别缩小到具体加载的某一个类
          */
         registerAsParallelCapable();
     }
@@ -158,6 +160,9 @@ public class AgentClassLoader extends ClassLoader {
     }
 
     private Class<?> processLoadedClass(Class<?> loadedClass) {
+        /*
+         * 设置单个插件的配置
+         */
         final PluginConfig pluginConfig = loadedClass.getAnnotation(PluginConfig.class);
         if (pluginConfig != null) {
             // Set up the plugin config when loaded by class loader at the first time.

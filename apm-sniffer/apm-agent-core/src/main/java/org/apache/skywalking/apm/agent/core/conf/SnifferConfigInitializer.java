@@ -62,23 +62,26 @@ public class SnifferConfigInitializer {
      */
     public static void initializeCoreConfig(String agentOptions) {
         AGENT_SETTINGS = new Properties();
+        // 从配置文件中加载配置文件
         try (final InputStreamReader configFileStream = loadConfig()) {
             AGENT_SETTINGS.load(configFileStream);
             for (String key : AGENT_SETTINGS.stringPropertyNames()) {
                 String value = (String) AGENT_SETTINGS.get(key);
+                // 配置值里面的占位符替换
                 AGENT_SETTINGS.put(key, PropertyPlaceholderHelper.INSTANCE.replacePlaceholders(value, AGENT_SETTINGS));
             }
-
         } catch (Exception e) {
             LOGGER.error(e, "Failed to read the config file, skywalking is going to run in default config.");
         }
 
+        // 从环境变量读取配置，替换配置文件中的配置
         try {
             overrideConfigBySystemProp();
         } catch (Exception e) {
             LOGGER.error(e, "Failed to read the system properties.");
         }
 
+        // 解析 agent 代入的参数
         agentOptions = StringUtil.trim(agentOptions, ',');
         if (!StringUtil.isEmpty(agentOptions)) {
             try {
@@ -91,11 +94,15 @@ public class SnifferConfigInitializer {
             }
         }
 
+        // 将配置文件映射到配置类 - Config
         initializeConfig(Config.class);
+
         // reconfigure logger after config initialization
+        // 重新设置日志解析格式（Json or Pattern）
         configureLogger();
         LOGGER = LogManager.getLogger(SnifferConfigInitializer.class);
 
+        // 参数校验
         if (StringUtil.isEmpty(Config.Agent.SERVICE_NAME)) {
             throw new ExceptionInInitializerError("`agent.service_name` is missing.");
         }
@@ -197,7 +204,9 @@ public class SnifferConfigInitializer {
      * @return the config file {@link InputStream}, or null if not needEnhance.
      */
     private static InputStreamReader loadConfig() throws AgentPackageNotFoundException, ConfigNotFoundException {
+        // 先获取环境变量指定的路径地址
         String specifiedConfigPath = System.getProperty(SPECIFIED_CONFIG_PATH);
+        // 获取 agent jar 文件
         File configFile = StringUtil.isEmpty(specifiedConfigPath) ? new File(
             AgentPackagePath.getPath(), DEFAULT_CONFIG_FILE_NAME) : new File(specifiedConfigPath);
 
