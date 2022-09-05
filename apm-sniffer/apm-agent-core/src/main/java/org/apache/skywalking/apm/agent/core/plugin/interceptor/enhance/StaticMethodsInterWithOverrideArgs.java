@@ -64,6 +64,7 @@ public class StaticMethodsInterWithOverrideArgs {
     @RuntimeType
     public Object intercept(@Origin Class<?> clazz, @AllArguments Object[] allArguments, @Origin Method method,
         @Morph OverrideCallable zuper) throws Throwable {
+        // 实例化自定义的拦截器
         StaticMethodsAroundInterceptor interceptor = InterceptorInstanceLoader.load(staticMethodsAroundInterceptorClassName, clazz
             .getClassLoader());
 

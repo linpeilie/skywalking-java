@@ -45,6 +45,7 @@ public class PluginFinder {
     private final List<AbstractClassEnhancePluginDefine> bootstrapClassMatchDefine = new ArrayList<AbstractClassEnhancePluginDefine>();
 
     public PluginFinder(List<AbstractClassEnhancePluginDefine> plugins) {
+        // 对加载的插件分类
         for (AbstractClassEnhancePluginDefine plugin : plugins) {
             ClassMatch match = plugin.enhanceClass();
 
@@ -70,6 +71,11 @@ public class PluginFinder {
         }
     }
 
+    /**
+     * 查找所有能对指定类型生效的插件
+     * 1. 从命名插件里面找
+     * 2. 从间接匹配插件里找
+     */
     public List<AbstractClassEnhancePluginDefine> find(TypeDescription typeDescription) {
         List<AbstractClassEnhancePluginDefine> matchedPlugins = new LinkedList<AbstractClassEnhancePluginDefine>();
         String typeName = typeDescription.getTypeName();
@@ -87,6 +93,9 @@ public class PluginFinder {
         return matchedPlugins;
     }
 
+    /**
+     * 将所有插件中匹配的类的逻辑做一个聚合
+     */
     public ElementMatcher<? super TypeDescription> buildMatch() {
         ElementMatcher.Junction judge = new AbstractJunction<NamedElement>() {
             @Override

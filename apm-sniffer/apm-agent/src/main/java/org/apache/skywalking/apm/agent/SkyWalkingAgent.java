@@ -81,6 +81,8 @@ public class SkyWalkingAgent {
 
         /*
          * 2. 加载插件
+         *  - loadPlugins() 实例化了所有插件
+         *  - new PluginFinder
          */
         try {
             pluginFinder = new PluginFinder(new PluginBootstrap().loadPlugins());
@@ -98,6 +100,7 @@ public class SkyWalkingAgent {
          */
         final ByteBuddy byteBuddy = new ByteBuddy().with(TypeValidation.of(Config.Agent.IS_OPEN_DEBUGGING_CLASS));
 
+        // 指定 ByteBuddy 要忽略的类
         AgentBuilder agentBuilder = new AgentBuilder.Default(byteBuddy).ignore(
                 nameStartsWith("net.bytebuddy.")
                         .or(nameStartsWith("org.slf4j."))
@@ -109,6 +112,7 @@ public class SkyWalkingAgent {
                         .or(allSkyWalkingAgentExcludeToolkit())
                         .or(ElementMatchers.isSynthetic()));
 
+        // 将必要的类注入到 Bootstrap ClassLoader
         JDK9ModuleExporter.EdgeClasses edgeClasses = new JDK9ModuleExporter.EdgeClasses();
         try {
             agentBuilder = BootstrapInstrumentBoost.inject(pluginFinder, instrumentation, agentBuilder, edgeClasses);
@@ -117,6 +121,7 @@ public class SkyWalkingAgent {
             return;
         }
 
+        // 解决 JDK 模块系统的跨模块类访问
         try {
             agentBuilder = JDK9ModuleExporter.openReadEdge(instrumentation, agentBuilder, edgeClasses);
         } catch (Exception e) {
@@ -124,6 +129,7 @@ public class SkyWalkingAgent {
             return;
         }
 
+        // 将修改后的字节码保存到磁盘/内存上
         if (Config.Agent.IS_CACHE_ENHANCED_CLASS) {
             try {
                 agentBuilder = agentBuilder.with(new CacheableTransformerDecorator(Config.Agent.CLASS_CACHE_MODE));
@@ -133,12 +139,14 @@ public class SkyWalkingAgent {
             }
         }
 
+        // buildMatch 指定 ByteBuddy 要拦截的类
         agentBuilder.type(pluginFinder.buildMatch())
-                    .transform(new Transformer(pluginFinder))
-                    .with(AgentBuilder.RedefinitionStrategy.RETRANSFORMATION)
-                    .with(new RedefinitionListener())
-                    .with(new Listener())
-                    .installOn(instrumentation);
+                .transform(new Transformer(pluginFinder))
+                // redefine 和 retransform 的区别在于是否保留修改前的内容
+                .with(AgentBuilder.RedefinitionStrategy.RETRANSFORMATION)
+                .with(new RedefinitionListener())
+                .with(new Listener())
+                .installOn(instrumentation);
 
         /*
          * 4. 启动服务
@@ -164,16 +172,19 @@ public class SkyWalkingAgent {
         }
 
         @Override
-        public DynamicType.Builder<?> transform(final DynamicType.Builder<?> builder,
-                                                final TypeDescription typeDescription,
-                                                final ClassLoader classLoader,
+        public DynamicType.Builder<?> transform(final DynamicType.Builder<?> builder,   // 当前拦截到的类的字节码
+                                                final TypeDescription typeDescription,  // 简单当成 Class，它包含了类的描述信息
+                                                final ClassLoader classLoader,  // 加载[当前拦截到的类]的类加载器
                                                 final JavaModule module) {
             LoadedLibraryCollector.registerURLClassLoader(classLoader);
+            // 查找所有能够对当前被拦截到的类生效的插件
             List<AbstractClassEnhancePluginDefine> pluginDefines = pluginFinder.find(typeDescription);
             if (pluginDefines.size() > 0) {
                 DynamicType.Builder<?> newBuilder = builder;
+                // 增强上下文
                 EnhanceContext context = new EnhanceContext();
                 for (AbstractClassEnhancePluginDefine define : pluginDefines) {
+                    // 调用每个插件的 define() 方法去做字节码增强
                     DynamicType.Builder<?> possibleNewBuilder = define.define(
                             typeDescription, newBuilder, classLoader, context);
                     if (possibleNewBuilder != null) {
@@ -184,6 +195,7 @@ public class SkyWalkingAgent {
                     LOGGER.debug("Finish the prepare stage for {}.", typeDescription.getName());
                 }
 
+                // 被所有插件修改完之后的最终字节
                 return newBuilder;
             }
 

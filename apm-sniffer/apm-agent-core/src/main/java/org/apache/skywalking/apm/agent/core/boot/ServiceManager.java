@@ -39,8 +39,10 @@ public enum ServiceManager {
     private Map<Class, BootService> bootedServices = Collections.emptyMap();
 
     public void boot() {
+        // 加载所有服务
         bootedServices = loadAllServices();
 
+        // 调用服务生命周期
         prepare();
         startup();
         onComplete();
@@ -57,13 +59,19 @@ public enum ServiceManager {
     }
 
     private Map<Class, BootService> loadAllServices() {
+        /*
+         * key : 默认实现类名
+         * value : 具体实现
+         */
         Map<Class, BootService> bootedServices = new LinkedHashMap<>();
         List<BootService> allServices = new LinkedList<>();
+        // 加载所有服务，保存到 allServices
         load(allServices);
         for (final BootService bootService : allServices) {
             Class<? extends BootService> bootServiceClass = bootService.getClass();
             boolean isDefaultImplementor = bootServiceClass.isAnnotationPresent(DefaultImplementor.class);
             if (isDefaultImplementor) {
+                // 默认实现
                 if (!bootedServices.containsKey(bootServiceClass)) {
                     bootedServices.put(bootServiceClass, bootService);
                 } else {
@@ -72,14 +80,17 @@ public enum ServiceManager {
             } else {
                 OverrideImplementor overrideImplementor = bootServiceClass.getAnnotation(OverrideImplementor.class);
                 if (overrideImplementor == null) {
+                    // 既没有 @DefaultImplementor，也没有 @OverrideImplementor
                     if (!bootedServices.containsKey(bootServiceClass)) {
                         bootedServices.put(bootServiceClass, bootService);
                     } else {
                         throw new ServiceConflictException("Duplicate service define for :" + bootServiceClass);
                     }
                 } else {
+                    // 没有 @DefaultImplementor，但有 @OverrideImplementor
                     Class<? extends BootService> targetService = overrideImplementor.value();
                     if (bootedServices.containsKey(targetService)) {
+                        // 判断当前实现是否为默认实现，如果是默认实现，则覆盖，否则报错
                         boolean presentDefault = bootedServices.get(targetService)
                                                                .getClass()
                                                                .isAnnotationPresent(DefaultImplementor.class);
@@ -141,6 +152,7 @@ public enum ServiceManager {
     }
 
     void load(List<BootService> allServices) {
+        // 通过 SPI 使用 AgentClassLoader 加载所有 BootService 的实现类
         for (final BootService bootService : ServiceLoader.load(BootService.class, AgentClassLoader.getDefault())) {
             allServices.add(bootService);
         }

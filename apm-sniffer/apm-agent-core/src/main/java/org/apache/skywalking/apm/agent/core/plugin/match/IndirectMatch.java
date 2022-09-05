@@ -23,9 +23,16 @@ import net.bytebuddy.matcher.ElementMatcher;
 
 /**
  * All implementations can't direct match the class like {@link NameMatch} did.
+ *
+ * 常见子类：
+ * @see PrefixMatch : 根据前缀匹配，可以指定多个前缀
  */
 public interface IndirectMatch extends ClassMatch {
     ElementMatcher.Junction buildJunction();
 
+    /**
+     * TypeDescription 就是对类的描述，可以当做 Class
+     * typeDescription.getName() 返回的就是全类名
+     */
     boolean isMatch(TypeDescription typeDescription);
 }

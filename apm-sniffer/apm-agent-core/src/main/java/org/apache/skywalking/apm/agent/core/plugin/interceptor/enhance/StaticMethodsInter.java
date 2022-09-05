@@ -65,11 +65,13 @@ public class StaticMethodsInter {
     @RuntimeType
     public Object intercept(@Origin Class<?> clazz, @AllArguments Object[] allArguments, @Origin Method method,
         @SuperCall Callable<?> zuper) throws Throwable {
+        // 实例化自定义的拦截器
         StaticMethodsAroundInterceptor interceptor = InterceptorInstanceLoader.load(staticMethodsAroundInterceptorClassName, clazz
             .getClassLoader());
 
         MethodInterceptResult result = new MethodInterceptResult();
         try {
+            // 方法执行前回调
             interceptor.beforeMethod(clazz, method, allArguments, method.getParameterTypes(), result);
         } catch (Throwable t) {
             LOGGER.error(t, "class[{}] before static method[{}] intercept failure", clazz, method.getName());
@@ -80,10 +82,12 @@ public class StaticMethodsInter {
             if (!result.isContinue()) {
                 ret = result._ret();
             } else {
+                // 调用原方法
                 ret = zuper.call();
             }
         } catch (Throwable t) {
             try {
+                // 异常毁掉的方法
                 interceptor.handleMethodException(clazz, method, allArguments, method.getParameterTypes(), t);
             } catch (Throwable t2) {
                 LOGGER.error(t2, "class[{}] handle static method[{}] exception failure", clazz, method.getName(), t2.getMessage());
@@ -91,6 +95,7 @@ public class StaticMethodsInter {
             throw t;
         } finally {
             try {
+                // 方法返回前回调
                 ret = interceptor.afterMethod(clazz, method, allArguments, method.getParameterTypes(), ret);
             } catch (Throwable t) {
                 LOGGER.error(t, "class[{}] after static method[{}] intercept failure:{}", clazz, method.getName(), t.getMessage());

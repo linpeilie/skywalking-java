@@ -78,6 +78,7 @@ public class AgentClassLoader extends ClassLoader {
         if (DEFAULT_LOADER == null) {
             synchronized (AgentClassLoader.class) {
                 if (DEFAULT_LOADER == null) {
+                    // AgentClassLoader 的父类加载器是加载 PluginBootstrap 的类加载器（AppClassLoader）
                     DEFAULT_LOADER = new AgentClassLoader(PluginBootstrap.class.getClassLoader());
                 }
             }
@@ -86,8 +87,10 @@ public class AgentClassLoader extends ClassLoader {
 
     public AgentClassLoader(ClassLoader parent) throws AgentPackageNotFoundException {
         super(parent);
+        // 获取 agent 主目录
         File agentDictionary = AgentPackagePath.getPath();
         classpath = new LinkedList<>();
+        // 默认 agent 目录下的 plugins 和 activations 目录作为 AgentClassLoader 的 classPath
         Config.Plugin.MOUNT.forEach(mountFolder -> classpath.add(new File(agentDictionary, mountFolder)));
     }
 
@@ -161,7 +164,7 @@ public class AgentClassLoader extends ClassLoader {
 
     private Class<?> processLoadedClass(Class<?> loadedClass) {
         /*
-         * 设置单个插件的配置
+         * 如果这个类标注了 @PluginConfig 注解，则加载这个插件的配置
          */
         final PluginConfig pluginConfig = loadedClass.getAnnotation(PluginConfig.class);
         if (pluginConfig != null) {
