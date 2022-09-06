@@ -38,6 +38,7 @@ import org.apache.skywalking.apm.agent.core.plugin.interceptor.enhance.StaticMet
  * -------------------------------
  * <p>
  * This class wouldn't be loaded in real env. This is a class template for dynamic class generation.
+ * 在真实环境下，这个类是不会被加载的，这是一个类模板用于动态类生成的
  */
 public class StaticMethodInterTemplate {
     /**

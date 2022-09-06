@@ -33,6 +33,9 @@ public class GRPCChannel {
      * origin channel
      */
     private final ManagedChannel originChannel;
+    /**
+     * 附带一些额外功能的 channel，两个对象指向同一个链接
+     */
     private final Channel channelWithDecorators;
 
     private GRPCChannel(String host, int port, List<ChannelBuilder> channelBuilders,
@@ -47,6 +50,7 @@ public class GRPCChannel {
 
         this.originChannel = channelBuilder.build();
 
+        // 使用装饰器 ChannelDecorator 装饰 originChannel
         Channel channel = originChannel;
         for (ChannelDecorator decorator : decorators) {
             channel = decorator.build(channel);

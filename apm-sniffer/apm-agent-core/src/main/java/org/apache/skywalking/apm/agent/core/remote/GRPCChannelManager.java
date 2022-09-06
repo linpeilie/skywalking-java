@@ -43,17 +43,35 @@ import org.apache.skywalking.apm.util.RunnableWithExceptionProtection;
 
 import static org.apache.skywalking.apm.agent.core.conf.Config.Collector.IS_RESOLVE_DNS_PERIODICALLY;
 
+/**
+ * 负责 Agent 和 OAP 的网络连接，通过 GRPCChannel 将 Agent 采集的链路信息和 JVM 指标发送到 OAP 做分析、展示
+ */
 @DefaultImplementor
 public class GRPCChannelManager implements BootService, Runnable {
     private static final ILog LOGGER = LogManager.getLogger(GRPCChannelManager.class);
 
+    /**
+     * 网络连接
+     */
     private volatile GRPCChannel managedChannel = null;
     private volatile ScheduledFuture<?> connectCheckFuture;
+    /**
+     * 当前网络连接是否需要重连
+     */
     private volatile boolean reconnect = true;
     private final Random random = new Random();
     private final List<GRPCChannelListener> listeners = Collections.synchronizedList(new LinkedList<>());
+    /**
+     * OAP 地址列表
+     */
     private volatile List<String> grpcServers;
+    /**
+     * 上次选择的 OAP 地址下标索引
+     */
     private volatile int selectedIdx = -1;
+    /**
+     * 网络重连次数
+     */
     private volatile int reconnectCount = 0;
 
     @Override
@@ -63,6 +81,7 @@ public class GRPCChannelManager implements BootService, Runnable {
 
     @Override
     public void boot() {
+        // 检查 OAP 地址
         if (Config.Collector.BACKEND_SERVICE.trim().length() == 0) {
             LOGGER.error("Collector server addresses are not set.");
             LOGGER.error("Agent will not uplink any data.");
@@ -98,7 +117,11 @@ public class GRPCChannelManager implements BootService, Runnable {
     @Override
     public void run() {
         LOGGER.debug("Selected collector grpc service running, reconnect:{}.", reconnect);
+        /*
+         * 如果需要重连和刷新 DNS
+         */
         if (IS_RESOLVE_DNS_PERIODICALLY && reconnect) {
+            // 获取配置中的第一个服务地址
             String backendService = Config.Collector.BACKEND_SERVICE.split(",")[0];
             try {
                 String[] domainAndPort = backendService.split(":");
@@ -119,27 +142,35 @@ public class GRPCChannelManager implements BootService, Runnable {
             if (grpcServers.size() > 0) {
                 String server = "";
                 try {
+                    // 随机选一个地址
                     int index = Math.abs(random.nextInt()) % grpcServers.size();
+                    // 如果选择的不是上次选择的地址
                     if (index != selectedIdx) {
                         selectedIdx = index;
 
                         server = grpcServers.get(index);
                         String[] ipAndPort = server.split(":");
 
+                        // 关闭上次的网络连接
                         if (managedChannel != null) {
                             managedChannel.shutdownNow();
                         }
 
+                        // 重新构建网络连接
                         managedChannel = GRPCChannel.newBuilder(ipAndPort[0], Integer.parseInt(ipAndPort[1]))
                                                     .addManagedChannelBuilder(new StandardChannelBuilder())
                                                     .addManagedChannelBuilder(new TLSChannelBuilder())
                                                     .addChannelDecorator(new AgentIDDecorator())
                                                     .addChannelDecorator(new AuthenticationDecorator())
                                                     .build();
+                        // 通知所有使用该网络连接的其他 BootService 当前网络状态已经连上了
                         notify(GRPCChannelStatus.CONNECTED);
                         reconnectCount = 0;
                         reconnect = false;
-                    } else if (managedChannel.isConnected(++reconnectCount > Config.Agent.FORCE_RECONNECTION_PERIOD)) {
+                    }
+                    // 重连次数小于设置的 grpc 强制重连周期，尝试重连；否则尝试创建新的连接
+                    else if (managedChannel.isConnected(++reconnectCount > Config.Agent.FORCE_RECONNECTION_PERIOD)) {
+                        // grpc 自动重连到同一个 Server
                         // Reconnect to the same server is automatically done by GRPC,
                         // therefore we are responsible to check the connectivity and
                         // set the state and notify listeners
@@ -173,7 +204,9 @@ public class GRPCChannelManager implements BootService, Runnable {
      * If the given exception is triggered by network problem, connect in background.
      */
     public void reportError(Throwable throwable) {
+        // 判断是否网络异常
         if (isNetworkError(throwable)) {
+            // 设置重连
             reconnect = true;
             notify(GRPCChannelStatus.DISCONNECT);
         }

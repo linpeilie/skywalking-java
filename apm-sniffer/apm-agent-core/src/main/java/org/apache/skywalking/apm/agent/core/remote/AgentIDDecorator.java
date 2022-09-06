@@ -75,6 +75,7 @@ public class AgentIDDecorator implements ChannelDecorator {
                 return new ForwardingClientCall.SimpleForwardingClientCall<REQ, RESP>(channel.newCall(method, options)) {
                     @Override
                     public void start(Listener<RESP> responseListener, Metadata headers) {
+                        // 向 OAP 发送数据的时候，请求头中带上 Agent 版本号
                         headers.put(AGENT_VERSION_HEAD_HEADER_NAME, version);
 
                         super.start(responseListener, headers);

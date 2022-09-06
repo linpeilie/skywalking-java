@@ -44,6 +44,10 @@ import org.apache.skywalking.apm.util.RunnableWithExceptionProtection;
 
 import static org.apache.skywalking.apm.agent.core.conf.Config.Collector.GRPC_UPSTREAM_TIMEOUT;
 
+/**
+ * 1. 将当前 Agent Client 的基本信息汇报给 OAP
+ * 2. 和 OAP 保持心跳
+ */
 @DefaultImplementor
 public class ServiceManagementClient implements BootService, Runnable, GRPCChannelListener {
     private static final ILog LOGGER = LogManager.getLogger(ServiceManagementClient.class);

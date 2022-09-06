@@ -66,13 +66,18 @@ public abstract class ClassEnhancePluginDefine extends AbstractClassEnhancePlugi
     protected DynamicType.Builder<?> enhanceInstance(TypeDescription typeDescription,
         DynamicType.Builder<?> newClassBuilder, ClassLoader classLoader,
         EnhanceContext context) throws PluginException {
+        // 构造器拦截点
         ConstructorInterceptPoint[] constructorInterceptPoints = getConstructorsInterceptPoints();
+        // 实例方法拦截点
         InstanceMethodsInterceptPoint[] instanceMethodsInterceptPoints = getInstanceMethodsInterceptPoints();
+        // 拦截的原类名
         String enhanceOriginClassName = typeDescription.getTypeName();
+        // 是否存在构造器拦截点
         boolean existedConstructorInterceptPoint = false;
         if (constructorInterceptPoints != null && constructorInterceptPoints.length > 0) {
             existedConstructorInterceptPoint = true;
         }
+        // 是否存在实例方法拦截点
         boolean existedMethodsInterceptPoints = false;
         if (instanceMethodsInterceptPoints != null && instanceMethodsInterceptPoints.length > 0) {
             existedMethodsInterceptPoints = true;
@@ -95,70 +100,89 @@ public abstract class ClassEnhancePluginDefine extends AbstractClassEnhancePlugi
          * And make sure the source codes manipulation only occurs once.
          *
          */
+        // 如果当前拦截的类没有实现 EnhancedInstance 接口
         if (!typeDescription.isAssignableTo(EnhancedInstance.class)) {
+            // 没有新增新的接口或者实现新的接口
             if (!context.isObjectExtended()) {
+                // 新增一个 private volatile 的 Object 类型字段 _$EnhancedClassField_ws
+                // 实现 EnhanceInstance 接口的 get/set 作为新增字段的 get/set 方法
                 newClassBuilder = newClassBuilder.defineField(
                     CONTEXT_ATTR_NAME, Object.class, ACC_PRIVATE | ACC_VOLATILE)
                                                  .implement(EnhancedInstance.class)
                                                  .intercept(FieldAccessor.ofField(CONTEXT_ATTR_NAME));
+                // 将记录状态的上下文 EnhanceContext 设置为已新增新的字段或实现新的接口，该状态限制只会执行一次
                 context.extendObjectCompleted();
             }
         }
 
-        /**
+        /*
          * 2. enhance constructors
+         * 增强 构造器
          */
         if (existedConstructorInterceptPoint) {
             for (ConstructorInterceptPoint constructorInterceptPoint : constructorInterceptPoints) {
+                // 如果是 JDK 类库
                 if (isBootstrapInstrumentation()) {
-                    newClassBuilder = newClassBuilder.constructor(constructorInterceptPoint.getConstructorMatcher())
-                                                     .intercept(SuperMethodCall.INSTANCE.andThen(MethodDelegation.withDefaultConfiguration()
-                                                                                                                 .to(BootstrapInstrumentBoost
-                                                                                                                     .forInternalDelegateClass(constructorInterceptPoint
-                                                                                                                         .getConstructorInterceptor()))));
+                    newClassBuilder = newClassBuilder
+                            .constructor(constructorInterceptPoint.getConstructorMatcher())
+                            .intercept(SuperMethodCall.INSTANCE.andThen(MethodDelegation.withDefaultConfiguration()
+                                    .to(BootstrapInstrumentBoost.forInternalDelegateClass(constructorInterceptPoint
+                                            .getConstructorInterceptor()))));
                 } else {
-                    newClassBuilder = newClassBuilder.constructor(constructorInterceptPoint.getConstructorMatcher())
-                                                     .intercept(SuperMethodCall.INSTANCE.andThen(MethodDelegation.withDefaultConfiguration()
-                                                                                                                 .to(new ConstructorInter(constructorInterceptPoint
-                                                                                                                     .getConstructorInterceptor(), classLoader))));
+                    // 否则由 ConstructorInter 增强
+                    newClassBuilder = newClassBuilder
+                            .constructor(constructorInterceptPoint.getConstructorMatcher())
+                            .intercept(SuperMethodCall.INSTANCE.andThen(MethodDelegation.withDefaultConfiguration()
+                                    .to(new ConstructorInter(constructorInterceptPoint
+                                            .getConstructorInterceptor(), classLoader))));
                 }
             }
         }
 
-        /**
+        /*
          * 3. enhance instance methods
+         * 增强实例方法
          */
         if (existedMethodsInterceptPoints) {
             for (InstanceMethodsInterceptPoint instanceMethodsInterceptPoint : instanceMethodsInterceptPoints) {
+                // 获取增强拦截器
                 String interceptor = instanceMethodsInterceptPoint.getMethodsInterceptor();
                 if (StringUtil.isEmpty(interceptor)) {
                     throw new EnhanceException("no InstanceMethodsAroundInterceptor define to enhance class " + enhanceOriginClassName);
                 }
+                // 获取拦截方法匹配类
                 ElementMatcher.Junction<MethodDescription> junction = not(isStatic()).and(instanceMethodsInterceptPoint.getMethodsMatcher());
+                // 如果拦截点为 DeclaredInstanceMethodsInterceptPoint
                 if (instanceMethodsInterceptPoint instanceof DeclaredInstanceMethodsInterceptPoint) {
+                    // 拿到的方法必须是当前类上的，通过注解匹配可能匹配到很多方法不是当前类上
                     junction = junction.and(ElementMatchers.<MethodDescription>isDeclaredBy(typeDescription));
                 }
                 if (instanceMethodsInterceptPoint.isOverrideArgs()) {
                     if (isBootstrapInstrumentation()) {
-                        newClassBuilder = newClassBuilder.method(junction)
-                                                         .intercept(MethodDelegation.withDefaultConfiguration()
-                                                                                    .withBinders(Morph.Binder.install(OverrideCallable.class))
-                                                                                    .to(BootstrapInstrumentBoost.forInternalDelegateClass(interceptor)));
+                        newClassBuilder = newClassBuilder
+                                .method(junction)
+                                .intercept(MethodDelegation.withDefaultConfiguration()
+                                        .withBinders(Morph.Binder.install(OverrideCallable.class))
+                                        .to(BootstrapInstrumentBoost.forInternalDelegateClass(interceptor)));
                     } else {
-                        newClassBuilder = newClassBuilder.method(junction)
-                                                         .intercept(MethodDelegation.withDefaultConfiguration()
-                                                                                    .withBinders(Morph.Binder.install(OverrideCallable.class))
-                                                                                    .to(new InstMethodsInterWithOverrideArgs(interceptor, classLoader)));
+                        newClassBuilder = newClassBuilder
+                                .method(junction)
+                                .intercept(MethodDelegation.withDefaultConfiguration()
+                                        .withBinders(Morph.Binder.install(OverrideCallable.class))
+                                        .to(new InstMethodsInterWithOverrideArgs(interceptor, classLoader)));
                     }
                 } else {
                     if (isBootstrapInstrumentation()) {
-                        newClassBuilder = newClassBuilder.method(junction)
-                                                         .intercept(MethodDelegation.withDefaultConfiguration()
-                                                                                    .to(BootstrapInstrumentBoost.forInternalDelegateClass(interceptor)));
+                        newClassBuilder = newClassBuilder
+                                .method(junction)
+                                .intercept(MethodDelegation.withDefaultConfiguration()
+                                        .to(BootstrapInstrumentBoost.forInternalDelegateClass(interceptor)));
                     } else {
-                        newClassBuilder = newClassBuilder.method(junction)
-                                                         .intercept(MethodDelegation.withDefaultConfiguration()
-                                                                                    .to(new InstMethodsInter(interceptor, classLoader)));
+                        // 实例方案插桩不修改原方法入参，会交给 InstMethodInter 增强
+                        newClassBuilder = newClassBuilder
+                                .method(junction)
+                                .intercept(MethodDelegation.withDefaultConfiguration()
+                                        .to(new InstMethodsInter(interceptor, classLoader)));
                     }
                 }
             }

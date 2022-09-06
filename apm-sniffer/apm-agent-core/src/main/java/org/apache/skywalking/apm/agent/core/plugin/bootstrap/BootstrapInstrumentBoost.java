@@ -89,6 +89,14 @@ public class BootstrapInstrumentBoost {
         // 所有要注入到 Bootstrap ClassLoader 中的类
         Map<String, byte[]> classesTypeMap = new HashMap<>();
 
+        /*
+         * 针对目标类是 JDK 核心类库的插件，根据插件的拦截点的不同（实例方法、静态方法、构造方法）
+         * 使用不同的模板（xxxTemplate）来定义新的拦截器的核心处理逻辑，并且将插件本身定义的拦截器的全类名赋值给
+         * 模板的 TARGET_INTERCEPTOR 字段
+         * 最终，这些新的拦截器的核心处理逻辑都会被放入到 BootstrapClassLoader 中
+         *
+         * TODO:这里为什么要用模板呢？
+         */
         if (!prepareJREInstrumentation(pluginFinder, classesTypeMap)) {
             return agentBuilder;
         }
@@ -157,14 +165,15 @@ public class BootstrapInstrumentBoost {
     private static boolean prepareJREInstrumentation(PluginFinder pluginFinder,
         Map<String, byte[]> classesTypeMap) throws PluginException {
         TypePool typePool = TypePool.Default.of(BootstrapInstrumentBoost.class.getClassLoader());
+        // 获取所有要对 JDK 核心库生效的插件
         List<AbstractClassEnhancePluginDefine> bootstrapClassMatchDefines = pluginFinder.getBootstrapClassMatchDefine();
         for (AbstractClassEnhancePluginDefine define : bootstrapClassMatchDefines) {
+            // 是否定义实例方法拦截点
             if (Objects.nonNull(define.getInstanceMethodsInterceptPoints())) {
                 for (InstanceMethodsInterceptPoint point : define.getInstanceMethodsInterceptPoints()) {
                     if (point.isOverrideArgs()) {
-                        generateDelegator(
-                            classesTypeMap, typePool, INSTANCE_METHOD_WITH_OVERRIDE_ARGS_DELEGATE_TEMPLATE, point
-                                .getMethodsInterceptor());
+                        generateDelegator(classesTypeMap, typePool, INSTANCE_METHOD_WITH_OVERRIDE_ARGS_DELEGATE_TEMPLATE,
+                                point.getMethodsInterceptor());
                     } else {
                         generateDelegator(
                             classesTypeMap, typePool, INSTANCE_METHOD_DELEGATE_TEMPLATE, point.getMethodsInterceptor());
@@ -172,6 +181,7 @@ public class BootstrapInstrumentBoost {
                 }
             }
 
+            // 是否定义构造器拦截点
             if (Objects.nonNull(define.getConstructorsInterceptPoints())) {
                 for (ConstructorInterceptPoint point : define.getConstructorsInterceptPoints()) {
                     generateDelegator(
@@ -179,6 +189,7 @@ public class BootstrapInstrumentBoost {
                 }
             }
 
+            // 是否定义静态方法拦截点
             if (Objects.nonNull(define.getStaticMethodsInterceptPoints())) {
                 for (StaticMethodsInterceptPoint point : define.getStaticMethodsInterceptPoints()) {
                     if (point.isOverrideArgs()) {
@@ -247,16 +258,18 @@ public class BootstrapInstrumentBoost {
      */
     private static void generateDelegator(Map<String, byte[]> classesTypeMap, TypePool typePool,
         String templateClassName, String methodsInterceptor) {
+        // methodsInterceptor + "_internal"
         String internalInterceptorName = internalDelegate(methodsInterceptor);
         try {
             TypeDescription templateTypeDescription = typePool.describe(templateClassName).resolve();
 
-            DynamicType.Unloaded interceptorType = new ByteBuddy().redefine(templateTypeDescription, ClassFileLocator.ForClassLoader
-                .of(BootstrapInstrumentBoost.class.getClassLoader()))
-                                                                  .name(internalInterceptorName)
-                                                                  .field(named("TARGET_INTERCEPTOR"))
-                                                                  .value(methodsInterceptor)
-                                                                  .make();
+            DynamicType.Unloaded interceptorType = new ByteBuddy()
+                    .redefine(templateTypeDescription,
+                            ClassFileLocator.ForClassLoader.of(BootstrapInstrumentBoost.class.getClassLoader()))
+                    .name(internalInterceptorName)
+                    .field(named("TARGET_INTERCEPTOR"))
+                    .value(methodsInterceptor)
+                    .make();
 
             classesTypeMap.put(internalInterceptorName, interceptorType.getBytes());
 

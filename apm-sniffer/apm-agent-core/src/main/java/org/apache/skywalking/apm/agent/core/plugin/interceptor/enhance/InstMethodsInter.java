@@ -49,6 +49,15 @@ public class InstMethodsInter {
      */
     public InstMethodsInter(String instanceMethodsAroundInterceptorClassName, ClassLoader classLoader) {
         try {
+            /*
+             * 这里和 StaticMethodInter 有所不同
+             * 实例方法需要传入 ClassLoader，一是因为一份字节码可能被多个 ClassLoader 加载，
+             * 这样加载出来的每个实例都不相等，所以必须绑定好 ClassLoader；二是因为 InstMethodsInter
+             * 里对拦截器的加载前置到了构造方法，这是因为可能出现无法加载拦截器成功的情况，如果放到 intercept()
+             * 方法里去延后加载拦截器，那么拦截器加载失败产生的异常将和字节码修改导致的异常、业务异常出现混乱。
+             *
+             * 而静态方法不需要传入 ClassLoader，是因为静态方法直接绑定了类
+             */
             interceptor = InterceptorInstanceLoader.load(instanceMethodsAroundInterceptorClassName, classLoader);
         } catch (Throwable t) {
             throw new PluginException("Can't create InstanceMethodsAroundInterceptor.", t);

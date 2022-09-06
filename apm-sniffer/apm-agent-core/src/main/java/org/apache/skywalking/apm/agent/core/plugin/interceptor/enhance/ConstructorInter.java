@@ -61,7 +61,11 @@ public class ConstructorInter {
     public void intercept(@This Object obj, @AllArguments Object[] allArguments) {
         try {
             EnhancedInstance targetObject = (EnhancedInstance) obj;
-
+            /*
+             * 在原生构造器执行之后执行回调方法 onConstruct 方法
+             * 只能访问到 EnhancedInstance 接口的字段 - _$EnhancedClassField_ws
+             * 拦截器的 onConstruct 把某些数据存储到 _$EnhancedClassField_ws 字段中
+             */
             interceptor.onConstruct(targetObject, allArguments);
         } catch (Throwable t) {
             LOGGER.error("ConstructorInter failure.", t);
